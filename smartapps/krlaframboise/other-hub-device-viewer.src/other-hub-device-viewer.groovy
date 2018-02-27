@@ -1,5 +1,5 @@
 /**
- *  SmartThings: Other Hub Device Viewer v2.0
+ *  SmartThings: Other Hub Device Viewer v2.0.1
  *
  *  Author: 
  *    Kevin LaFramboise (krlaframboise)
@@ -8,7 +8,7 @@
  *
  *  Changelog:
  *
- *    2.0 (02/26/2018)
+ *    2.0.1 (02/27/2018)
  *			- Initial Release
  *
  *
@@ -37,18 +37,14 @@ definition(
     iconX3Url: "https://raw.githubusercontent.com/krlaframboise/Resources/master/simple-device-viewer/other-hub-device-viewer-icon-3x.png")
 
  preferences {
-	page(name:"mainPage")
-  page(name:"capabilityPage")
-	page(name:"lastEventPage")
-	page(name:"refreshLastEventPage")
-	page(name:"toggleSwitchPage")
-	page(name:"displaySettingsPage")
+	page(name:"mainPage")	
+  page(name:"displaySettingsPage")
 	page(name:"thresholdsPage")
 	page(name:"notificationsPage")
 	page(name:"otherSettingsPage")
-	page(name:"dashboardSettingsPage")
-	page(name:"enableDashboardPage")
-	page(name:"disableDashboardPage")
+	page(name: "displaySmartThingsUrlPage")
+	page(name: "refreshSmartThingsUrlPage")	
+	page(name: "refreshSmartThingsUrlConfirmPage")		
 }
 
 // Main Menu Page
@@ -58,42 +54,47 @@ def mainPage() {
 		
 		if (!state.configured) {
 			state.configured = true
+			
+			initializeAppEndpoint()			
+
 			section("") {
-				paragraph title: "Installation Complete", 
+				paragraph title: "Other Hub Device Viewer", 
 					image: "https://raw.githubusercontent.com/krlaframboise/Resources/master/simple-device-viewer/other-hub-device-viewer-icon-2x.png", 
-					"Tap Save and re-open the application from your Installed SmartApps list."
+					"Update the fields below and then tap Save and re-open the application from your Installed SmartApps list."
+				
+				input "childPrefix", "text",
+					title:"Other Hub Device Prefix:",
+					description: "The names of all the devices imported from the other hub will start with this prefix.\n\nThe prefix must start with a letter and the only supported characters are letters, numbers and hyphens.\n\nThis setting can't be changed once you leave this screen.",
+					defaultValue: childPrefixSetting,
+					required: true
+					
+				label(name: "label",
+					title: "Assign a name to this SmartApp",
+					required: false)
 			}
-		}		
+		}
 		else {
 			section("Integration Status") {				
-				paragraph "Hubitat Devices: ${deviceCount}\nLast Refreshed: ${formattedLastRefreshTime}"
+				paragraph "Other Hub Devices: ${deviceCount}\nLast Refreshed: ${formattedLastRefreshTime}"
 			}
-			section() {
-				paragraph "The Hubitat URL is shown in the Logs section of Hubitat when you click the 'Display Hubitat URL'"
-				input "hubitatUrl", "text", title:"Enter the Hubitat URL:", required: false
-			}
-			section() {			
-				if (deviceCount || !state.endpoint) {
-					getDashboardHref()
+						
+			section("SmartThings Dashboard") {				
+				href "", title: "View Dashboard", style: "external", url: api_dashboardUrl()
+				
+				if (!deviceCount) {
+					paragraph "The rest of the settings won't be visible until at least 1 device has been imported from the other hub."
+					paragraph "Install the 'Other Hub Event Pusher' App in Hubitat and enter the SmartThings Dashboard Url into the corresponding field in that App."
+					paragraph "To see the url can either tap the 'Display SmartThings Url' link below which will write the url to the SmartThings Live Logging window or tap the 'View Dashboard' link above which will open the url in a new window."
+					paragraph "After you've finished configuring the 'Other Hub Event Pusher' App, wait until you start seeing devices named '${childPrefixSetting}' in the Mobile App's Things tab and then you can re-open this SmartApp to view the dashboard and all the settings."
+				}	
+				
+				if (state.endpoint) {
+					href "displaySmartThingsUrlPage", title: "Display SmartThings Dashboard Url", description: "Displays the url in the Live Logging section of the IDE."
 				}
-				else {
-					paragraph "The settings and dashboard are hidden until at least 1 device has been imported from Hubitat."
-					paragraph "Finish configuring the 'Other Hub Event Pusher' App in Hubitat.  You will need the dashboard URL for this which is written to SmartThing's Live Logging window when you tap 'Dashboard Settings' below."
-					paragraph "Wait until you see devices that start with 'OH-' in mobile app's Things tab and then you can re-open this SmartApp and see everything."
-				}
-			}
-			section() {
-				if (deviceCount) {				
-					state.lastCapabilitySetting = null
-					getPageLink("lastEventLink",
-						"All Devices - Last Event",
-						"lastEventPage")
-					getCapabilityPageLink(null)
-					getSelectedCapabilitiesPageLinks()
-				}				
+				href "refreshSmartThingsUrlConfirmPage", title: "Refresh SmartThings Dashboard Url", description: "Disables the existing url and generates a new one."
 			}			
-		
-			section("Settings") {			
+			
+			section("Settings") {
 				if (deviceCount) {
 					getPageLink("displaySettingsLink",
 						"Display Settings",
@@ -104,53 +105,69 @@ def mainPage() {
 					getPageLink("notificationsLink",
 						"Notification Settings",
 						"notificationsPage")
-					getPageLink("otherSettingsLink",
-						"Other Settings",
-						"otherSettingsPage")
 				}
-				if (state.endpoint) {
-					getPageLink("dashboardSettingsPageLink",
-						"Dashboard Settings",
-						"dashboardSettingsPage")
-				}
+				getPageLink("otherSettingsLink",
+					"Other Settings",
+					"otherSettingsPage")				
 			}
 		}		
 	}
+}
+
+private getChildPrefixSetting() {
+	return settings?.childPrefix ?: "OH-"	
 }
 
 private getFormattedLastRefreshTime() {
 	return convertTimeToLocalDate(state.lastRefresh)?.format("MM/dd/yyyy HH:mm:ss") ?: ""
 }
 
-private getSelectedCapabilitiesPageLinks() {
-	def startTime = new Date().time
-	def aborted = false
-	def timeout = 5000
-	def selectedCaps = getSelectedCapabilitySettings(timeout)
-	
-	if (new Date().time - startTime > timeout) {
-		aborted = true
-	}
-	selectedCaps.each {		
-		getCapabilityPageLink(it)
-	}
-	if (aborted) {
-		paragraph "Unable to load items within the allowed time.  Check the Choose Devices screen to make sure each device is only selected once.  If that doesn't eliminate this message, try reducing the number of Capabilities selected in the Display Settings screen."
-	}
-}
-
-private getDashboardHref() {
-	if (!state.endpoint) {
-		href "enableDashboardPage", title: "Enable Dashboard", description: ""
-	} 
-	else {
-		href "", title: "View Dashboard", style: "external", url: api_dashboardUrl()
-	}
-}
-
 def displaySettingsPage() {
 	dynamicPage(name:"displaySettingsPage") {
-		section ("Display Options") {
+		section ("Sorting") {
+			input "batterySortByValue", "bool",
+				title: "Sort by Battery Value?",
+				defaultValue: true,
+				required: false
+			input "tempSortByValue", "bool",
+				title: "Sort by Measurement Value?",
+				defaultValue: true,
+				required: false
+			input "lastEventSortByValue", "bool",
+				title: "Sort by Last Event Value?",
+				defaultValue: true,
+				required: false			
+		}	
+		section ("Dashboard Settings") {			
+			input "dashboardRefreshInterval", "number", 
+				title: "Dashboard Refresh Interval: (60-86400 seconds)",
+				range: "60..86400",
+				defaultValue: 300,
+				required: false
+			input "dashboardDefaultView", "enum",
+				title: "Default View:",
+				required: false,
+				options: getCapabilitySettingNames(true)
+			input "dashboardMenuPosition", "enum", 
+				title: "Menu Position:", 
+				defaultValue: "Top of Page",
+				required: false,
+				options: ["Top of Page", "Bottom of Page"]
+			input "dashboardLayout", "enum", 
+				title: "Layout:", 
+				defaultValue: "Normal",
+				required: false,
+				options: ["Normal", "Condensed - 1 Column", "Condensed - 2 Column", "Condensed - 3 Column"]
+			input "displayOnlineOfflineStatus", "bool",
+				title: "Display Online/Offline Status:",
+				defaultValue: false,
+				required: false
+			input "customCSS", "text",
+				title:"Enter CSS rules that should be appended to the dashboard's CSS file.",
+				required: false
+		}
+		
+		section ("Device Capabilities") {
 			paragraph "All the capabilities supported by the selected devices are shown on the main screen by default, but this field allows you to limit the list to specific capabilities." 
 			input "enabledCapabilities", "enum",
 				title: "Display Which Capabilities?",
@@ -211,7 +228,8 @@ def thresholdsPage() {
 			input "lowBatteryThreshold", "number",
 				title: "Enter Low Battery %:",
 				multiple: false,
-				range:"0..100"
+				required: false,
+				range:"1..99"
 		}
 		section("Temperature Thresholds") {
 			input "lowTempThreshold", "number",
@@ -347,34 +365,10 @@ private getExcludedDeviceOptions(capabilityName) {
 // Page for misc preferences.
 def otherSettingsPage() {
 	dynamicPage(name:"otherSettingsPage") {		
-		section ("Other Settings") {
+		section ("") {			
 			label(name: "label",
 				title: "Assign a name",
 				required: false)
-			input "iconsEnabled", "bool",
-				title: "Display Device State Icons?",
-				defaultValue: true,
-				required: false
-			input "condensedViewEnabled", "bool",
-				title: "Condensed View Enabled?",
-				defaultValue: false,
-				required: false				
-		}
-		section ("Sorting") {
-			input "batterySortByValue", "bool",
-				title: "Sort by Battery Value?",
-				defaultValue: true,
-				required: false
-			input "tempSortByValue", "bool",
-				title: "Sort by Measurement Value?",
-				defaultValue: true,
-				required: false
-			input "lastEventSortByValue", "bool",
-				title: "Sort by Last Event Value?",
-				defaultValue: true,
-				required: false			
-		}	
-		section ("Logging") {
 			input "logging", "enum",
 				title: "Types of messages to log:",
 				multiple: true,
@@ -395,51 +389,6 @@ def otherSettingsPage() {
 	}
 }
 
-def dashboardSettingsPage() {
-	dynamicPage(name:"dashboardSettingsPage") {
-		section ("Dashboard Settings") {
-			if (state.endpoint) {				
-				log.warn "Dashboard Url: ${api_dashboardUrl()}"
-				
-				input "dashboardRefreshInterval", "number", 
-					title: "Dashboard Refresh Interval: (60-86400 seconds)",
-					range: "60..86400",
-					defaultValue: 300,
-					required: false
-				input "dashboardDefaultView", "enum",
-					title: "Default View:",
-					required: false,
-					options: getCapabilitySettingNames(true)
-				input "dashboardMenuPosition", "enum", 
-					title: "Menu Position:", 
-					defaultValue: "Top of Page",
-					required: false,
-					options: ["Top of Page", "Bottom of Page"]
-				input "dashboardLayout", "enum", 
-					title: "Layout:", 
-					defaultValue: "Normal",
-					required: false,
-					options: ["Normal", "Condensed - 1 Column", "Condensed - 2 Column", "Condensed - 3 Column"]
-				input "displayOnlineOfflineStatus", "bool",
-					title: "Display Online/Offline Status:",
-					defaultValue: false,
-					required: false
-				input "customCSS", "text",
-					title:"Enter CSS rules that should be appended to the dashboard's CSS file.",
-					required: false
-				getPageLink("disableDashboardPageLink",
-					"Disable Dashboard",
-					"disableDashboardPage")
-			}
-			else {
-				getPageLink("enableDashboardPageLink",
-					"Enable Dashboard",
-					"enableDashboardPage")
-			}
-		}
-	}
-}
-
 private getPageLink(linkName, linkText, pageName, args=null) {
 	def map = [
 		name: "$linkName", 
@@ -454,189 +403,79 @@ private getPageLink(linkName, linkText, pageName, args=null) {
 	href(map)
 }
 
-private disableDashboardPage() {	
-	dynamicPage(name: "disableDashboardPage", title: "") {
+
+private displaySmartThingsUrlPage() {
+	dynamicPage(name: "displaySmartThingsUrlPage", title: "") {
 		section() {
-			if (state.endpoint) {
-				try {
-					revokeAccessToken()
-				}
-				catch (e) {
-					logDebug "Unable to revoke access token: $e"
-				}
-				state.endpoint = null
-			}	
-			paragraph "The Dashboard has been disabled! Tap Done to continue"	
+			paragraph "The SmartThings Dashboard Url has been displayed in Live Logging"
+			displaySmartThingsUrl()
 		}
 	}
 }
 
-private enableDashboardPage() {
-	dynamicPage(name: "enableDashboardPage", title: "") {
+private refreshSmartThingsUrlConfirmPage() {	
+	dynamicPage(name: "refreshSmartThingsUrlConfirmPage", title: "") {
+		section("Are you sure you want to refresh the dashboard url?") {
+			paragraph "If you refresh the dashboard url, the old url will no longer work and you'll need to manually update it in the 'Other Hub Event Pusher' App."			
+			href "refreshSmartThingsUrlPage", title: "Refresh SmartThings Url?"
+		}
+	}
+}
+
+private refreshSmartThingsUrlPage() {	
+	dynamicPage(name: "refreshSmartThingsUrlPage", title: "") {
 		section() {
+			disableAppEndpoint()						
 			if (initializeAppEndpoint()) {				
-				paragraph "The Dashboard is now enabled. Tap Done to continue"
+				paragraph "A new SmartThings Dashboard url has been created!"
 			} 
 			else {
-				paragraph "Please go to your SmartThings IDE, select the My SmartApps section, click the 'Edit Properties' button of the Other Hub Device Viewer app, open the OAuth section and click the 'Enable OAuth in Smart App' button. Click the Update button to finish.\n\nOnce finished, tap Done and try again.", title: "Please enable OAuth for Other Hub Device Viewer", required: true, state: null
-			}
+				paragraph "Please go to the My SmartApps section of the IDE, click 'Other Hub Device Viewer', click AppSettings, click the OAuth link, and then click the 'Enable OAuth in Smart App' button.", title: "Please enable OAuth for the Other Hub Device Viewer SmartApp.", required: true, state: null
+			}	
+			displaySmartThingsUrl()
 		}
 	}
 }
 
-
-
-// Lists all devices and their last event times.
-def lastEventPage() {
-	dynamicPage(name:"lastEventPage") {		
-		section ("Time Since Last Event") {			
-			def items = getAllDeviceLastEventListItems()?.unique()
-			if (settings.lastEventSortByValue != false) {
-				items?.each { it.sortValue = (it.sortValue * -1) }
-			}				
-			getParagraphs(items)
-		}		
-	}
+private disableAppEndpoint() {
+	if (state.endpoint) {
+		try {
+			revokeAccessToken()
+			logDebug "Access Token successfully revoked."
+		}
+		catch (e) {
+			log.error "Unable to revoke Access Token: $e"
+		}
+		state.endpoint = null
+	}	
 }
 
-private getRefreshLastEventLinkDescription() {
-	def stateRefreshed = (state.stateCachedTime) ? getTimeSinceLastActivity(new Date().time - state.stateCachedTime) : "?"
-	def eventsRefreshed = (state.eventCachedTime) ? getTimeSinceLastActivity(new Date().time - state.eventCachedTime) : "?"
-	return "Events refreshed ${eventsRefreshed.toLowerCase()} ago.\nState refreshed ${stateRefreshed.toLowerCase()} ago."
-}
-
-def refreshLastEventPage() {
-	dynamicPage(name:"refreshLastEventPage") {		
-		section () {
-			refreshDeviceActivityCache()
-			paragraph "Started refreshing last events, but this process could take up to a minute."
-		}		
-	}
-}
-
-// Lists all devices supporting switch capability as links that can be used to toggle their state
-def toggleSwitchPage(params) {
-	dynamicPage(name:"toggleSwitchPage") {		
-		section () {
-			paragraph "Wait a few seconds before pressing Done to ensure that the previous page refreshes correctly."
-			if (params.deviceId) {
-				def device = params.deviceId ? getAllDevices().find { "${it.id}" == "${params.deviceId}" } : null
-				def newState = "${device?.attrs?.switch}" == "off" ? "on" : "off"
-				paragraph toggleSwitch(device, newState)
+private initializeAppEndpoint() {	
+	if (!state.endpoint) {
+		try {
+			def accessToken = createAccessToken()
+			if (accessToken) {
+				state.endpoint = apiServerUrl("/api/token/${accessToken}/smartapps/installations/${app.id}/")				
 			}
-			else {
-				getDevicesByCapability("Switch").each {
-					paragraph toggleSwitch(it, "off")
-				}
-			}			
-		}		
+		} 
+		catch(e) {
+			log.error "$e"
+			state.endpoint = null
+		}
 	}
+	displaySmartThingsUrl()
+	return state.endpoint
+}
+
+private displaySmartThingsUrl() {
+	log.info "SmartThings Dashboard Url: ${api_dashboardUrl()}"	
 }
 
 private toggleSwitch(device, newState) {
 	if (device) {
-		if ("${newState}" == "on") {
-			childOn(device.id)
-		}
-		else {
-			childOff(device.id)			
-		}		
+		childAction(device.id, newState)
 		return "Turned ${device.displayName} ${newState.toUpperCase()}"
 	}	
-}
-
-// Lists all devices and all the state of all their capabilities
-def capabilityPage(params) {
-	dynamicPage(name:"capabilityPage") {	
-		def capSetting = params.capabilitySetting ? params.capabilitySetting : state.lastCapabilitySetting
-		
-		if (capSetting) {
-			state.lastCapabilitySetting = capSetting
-			section("${getPluralName(capSetting)}") {
-				if (capSetting.name in ["Switch","Light"]) {
-					getSwitchToggleLinks(getDeviceCapabilityListItems(capSetting))
-				}
-				else {
-					getParagraphs(getDeviceCapabilityListItems(capSetting))
-				}
-			}
-		}
-		else {
-			getAllSelectedCapabilitiesSection()
-		}			
-	}
-}
-
-private getAllSelectedCapabilitiesSection() {
-	section("All Selected Capabilities") {
-		def startTime = new Date().time
-		def timeout = 15000
-		def aborted = false
-		def capListItems = []
-		
-		def selectedCapSettings = getSelectedCapabilitySettings(timeout)
-		
-		getAllDevices().each {
-			if (new Date().time - startTime > timeout) {
-				aborted = true
-			}
-			else {
-				capListItems << getDeviceAllCapabilitiesListItem(selectedCapSettings, it)
-			}
-		}
-		
-		if (aborted) {
-			paragraph "Unable to load the states of all devices within the allowed time.  If you've selected a lot of devices and capabilities, you might not be able to use the 'All Devices - States' view."
-		}
-		if (capListItems) {
-			getParagraphs(capListItems)
-		}
-	}
-}
-
-private getSwitchToggleLinks(listItems) {
-	listItems.sort { it.sortValue }	
-	return listItems.unique().each {
-		href(
-			image: it.image ? it.image : "",
-			name: "switchLink${it.deviceId}", 
-			title: "${it.title}",
-			description: "",
-			page: "toggleSwitchPage", 
-			required: false,
-			params: [deviceId: "${it.deviceId}"]
-		)
-	}
-}
-
-private getParagraphs(listItems) {
-	listItems.sort { it.sortValue }
-	if (!condensedViewEnabled) {
-		return listItems.unique().each { 
-			it.image = it.image ? it.image : ""
-			paragraph image: "${it.image}",	"${it.title}"
-		}
-	}
-	else {
-		def content = null
-		listItems.unique().each { 
-			content = content ? content.concat("\n${it.title}") : "${it.title}"
-		}
-		if (content) {
-			paragraph "$content"
-		}
-	}
-}
-
-private getCapabilityPageLink(cap) {
-	return href(
-		name: cap ? "${getPrefName(cap)}Link" : "allDevicesLink", 
-		title: cap ? "${getPluralName(cap)}" : "All Devices - States",
-		description: "",
-		page: "capabilityPage",
-		required: false,
-		params: [capabilitySetting: cap]
-	)	
 }
 
 // Checks if any devices have the specificed capability
@@ -644,23 +483,10 @@ private devicesHaveCapability(name) {
 	return getAllDevices().find { hasCapability(it, name) } ? true : false
 }
 
-private getDevicesByCapability(name, excludeList=null) {
+private getDevicesByCapability(name, excludeList=null) {	
 	removeExcludedDevices(getAllDevices()
 		.findAll { hasCapability(it, name.toString()) }
 		.sort() { it.displayName.toLowerCase() }, excludeList)	
-}
-
-private getDeviceAllCapabilitiesListItem(selectedCapSettings, device) {
-	def listItem = [
-		sortValue: device.displayName
-	]		
-	selectedCapSettings.each {
-		if (hasCapability(device, getCapabilityName(it))) {
-			listItem.status = (listItem.status ? "${listItem.status}, " : "").concat(getDeviceCapabilityStatusItem(device, it).status)
-		}
-	}
-	listItem.title = getDeviceStatusTitle(device, listItem.status)
-	return listItem
 }
 
 private hasCapability(device, capabilityName) {
@@ -669,11 +495,12 @@ private hasCapability(device, capabilityName) {
 
 private getDeviceCapabilityListItems(cap) {
 	def items = []
-	getDevicesByCapability(getCapabilityName(cap), settings["${getPrefName(cap)}ExcludedDevices"])?.each { 
+	getDevicesByCapability(getCapabilityName(cap), settings["${getPrefName(cap)}ExcludedDevices"])?.each { 	
 		if (deviceMatchesSharedCapability(it, cap)) {
 			items << getDeviceCapabilityListItem(it, cap)
 		}
 	}
+	
 	return items
 }
 
@@ -690,17 +517,13 @@ private deviceMatchesSharedCapability(device, cap) {
 private getDeviceCapabilityListItem(device, cap) {
 	def listItem = getDeviceCapabilityStatusItem(device, cap)
 	listItem.deviceId = "${device.id}"
-	if (listItem.image && cap.imageOnly && !condensedViewEnabled) {
+	if (listItem.image && cap.imageOnly) {
 		listItem.title = "${device.displayName}"
 	}
 	else {
 		listItem.title = "${getDeviceStatusTitle(device, listItem.status)}"
 	}
 	listItem
-}
-
-private getCapabilitySettingByPrefName(prefName) {
-	capabilitySettings().find { getPrefName(it) == prefName }
 }
 
 private getCapabilitySettingByPluralName(pluralName) {
@@ -869,7 +692,7 @@ private getCapabilityStatusItem(cap, sortValue, value) {
 
 private getSelectedCapabilitySettings(timeout) {	
 	if (!settings.enabledCapabilities) {
-		return capabilitySettings()//.findAll { devicesHaveCapability(getCapabilityName(it)) }
+		return capabilitySettings().findAll { devicesHaveCapability(getCapabilityName(it)) }
 	}
 	else {
 		def startTime = new Date().time
@@ -893,7 +716,7 @@ private getAllDevices() {
 		cDevices?.each {
 			if (it.hasAttribute("otherHubData") && it.currentOtherHubData) {
 				def device = slurper.parseText(it.currentOtherHubData)
-				device?.id = it.currentDeviceId
+				// device?.id = it.currentDeviceId
 				devices << device
 			}
 		}
@@ -936,10 +759,6 @@ private boolean lastEventIsOld(lastEventTime, deviceStatus) {
 		return true
 	}
 }
-
-// private boolean offlineOverride(deviceStatus) {
-	// return (settings?.lastEventThresholdOverride && (deviceStatus?.toLowerCase() == "offline"))
-// }
 
 private String getAccelerationImage(currentState) {
 	def status = (currentState == "active") ? "active" : "inactive"
@@ -1043,7 +862,7 @@ private String getImagePath(imageName) {
 }
 
 private boolean iconsAreEnabled() {
-	return (iconsEnabled || iconsEnabled == null || state.refreshingDashboard)
+	return true
 }
 
 private getResourcesUrl() {
@@ -1058,27 +877,8 @@ private getResourcesUrl() {
 
 // Revokes the dashboard access token
 def uninstalled() {
-	if (state.endpoint) {
-		try {
-			logDebug "Revoking dashboard access token"
-			revokeAccessToken()
-		}
-		catch (e) {
-			log.warn "Unable to revoke dashboard access token: $e"
-		}
-	}
-}
-
-private deleteAllChildDevices(devices) {
-	logDebug "Deleting Child Devices"
-	devices?.each {
-		try {
-			deleteChildDevice(it.deviceNetworkId)	
-		}
-		catch (e) {
-			log.warn "Unable to delete ${it?.displayName}: $e"
-		}	
-	}
+	logDebug "uninstalled()"
+	disableAppEndpoint()	
 }
 
 def childUninstalled() {
@@ -1650,25 +1450,11 @@ private capabilitySettings() {
 /********************************************
 *    Dashboard
 ********************************************/
-private initializeAppEndpoint() {	
-	if (!state.endpoint) {
-		try {
-			def accessToken = createAccessToken()
-			if (accessToken) {
-				state.endpoint = apiServerUrl("/api/token/${accessToken}/smartapps/installations/${app.id}/")				
-			}
-		} 
-		catch(e) {
-			state.endpoint = null
-		}
-	}
-	log.info "Dashboard Url: ${api_dashboardUrl()}"	
-	return state.endpoint
-}
 
 mappings {
 	path("/event/:name/:value/:deviceId") {action: [GET: "api_event"]}
 	path("/refresh-devices") {action: [POST: "api_refreshDevices"]}
+	path("/update-other-hub-url") {action: [POST: "api_updateOtherHubUrl"]}
 	path("/dashboard") {action: [GET: "api_dashboard"]}
 	path("/dashboard/:capability") {action: [GET: "api_dashboard"]}	
 	path("/dashboard/:capability/:cmd") {action: [GET: "api_dashboard"]}
@@ -1676,7 +1462,7 @@ mappings {
 }
 
 private api_event() {
-	logDebug "Device ${params?.deviceId} ${params?.name} is ${params?.value}"
+	// logDebug "Device ${params?.deviceId} ${params?.name} is ${params?.value}"
 	childEvent("${params?.deviceId}", "${params?.name}", params.value)
 	return []
 }
@@ -1863,7 +1649,7 @@ private api_getNewSwitchState(device, cmd) {
 
 private api_getToggleItemsHtml(currentUrl, listItems) {
 	def html = ""
-			
+	
 	listItems.unique().each {	
 		html += api_getItemHtml(it.title, it.image, "${currentUrl}/toggle/${it.deviceId}", it.deviceId, it.status)
 	}
@@ -2003,10 +1789,35 @@ private loggingTypeEnabled(loggingType) {
 /**************************************
 	Other Hub Child Devices
 **************************************/
+private api_updateOtherHubUrl() {
+	logTrace "api_updateOtherHubUrl"
+	 
+	def responseMsg = ""
+	try {				
+		def url = request?.JSON?.url
+		if (url) {
+			if (!url.startsWith("https://")) {
+				url = "https://${url}"
+			}
+			state.otherHubUrl = url
+			
+			responseMsg = "Updated Other Hub Url: $url"
+		}
+		else {
+			responseMsg = "Other Hub Url Not Specified"
+		}	
+	}
+	catch (e) {
+		log.error "$e"
+		responseMsg = "Exception: ${e.message}"
+	}
+	render contentType: "text/html", 
+		data: "${responseMsg}"	
+}
+
+
 private api_refreshDevices() {
 	logTrace "api_refreshDevices()"
-	 
-	state.stateDebugMsg = ""
 	 
 	def responseMsg = ""
 	try {
@@ -2033,7 +1844,7 @@ private api_refreshDevices() {
 
 private updateChildDeviceData(deviceData) {
 	logTrace "updateChildDeviceData: ${deviceData?.name}"
-		
+	
 	def attrs = deviceData.attributes ?: null
 	def caps = attrs ? getCapabilities(attrs) : null
 	if (attrs && caps) {
@@ -2143,8 +1954,7 @@ private sendChildCapabilityEvent(child, capName, attrName, value) {
 }
 
 private sendChildEvent(child, name, value, displayed=false) {
-	logTrace "sendChildEvent(${child}, ${name}, ${value}, ${displayed})"
-	
+	logTrace "sendChildEvent(${child}, ${name}, ${value}, ${displayed})"	
 	child?.sendEvent(name: "$name", value: value, displayed: displayed)
 }
 
@@ -2191,8 +2001,8 @@ private addNewChildDevice(deviceData, deviceType) {
 			"${getChildDNI(deviceData.id)}", 
 			null,
 			[
-				name: "OH-${deviceData.name}",
-				label: "OH-${deviceData.label ?: deviceData.name}",completedSetup: true
+				name: "${childPrefixSetting}${deviceData.name}",
+				label: "${childPrefixSetting}${deviceData.label ?: deviceData.name}",completedSetup: true
 			])
 	}
 	catch (e) {
@@ -2210,7 +2020,7 @@ private getChildDNI(deviceId) {
 }
 
 private getChildDNIPrefix() {
-	return "OH-Device"
+	return "${childPrefixSetting}Device"
 }
 
 private getChildDeviceTypes() {
@@ -2247,12 +2057,6 @@ private convertTimeToLocalDate(utcTime) {
 	}
 	return localDate
 }
-
-// private logStateDebug(msg) {
-	// state.stateDebugTime = new Date()
-	// state.stateDebugMsg = "$msg"
-// }
-
 
 private getDeviceRefreshCapabilities() {
 	[		
@@ -2375,41 +2179,57 @@ void childEvent(deviceId, name, value) {
 }
 
 void childAction(deviceId, cmd, args="") {
-	logTrace "childAction($deviceId, $cmd, $args)..."		
+	logTrace "childAction($deviceId, $cmd, $args)"
 	sendRunAction(deviceId, cmd, args)
 }
 
 private sendRunAction(deviceId, cmd, args="") {
-	def dni = deviceId.substring(childDNIPrefix.length())
+	def dni = "${deviceId}".substring(childDNIPrefix.length())
 	if (args) {
 		args = "/${args}"
 	}
 	
 	def requestParams = [
-		uri: "${buildHubitatActionPath(dni, cmd, args)}",
+		uri: "${buildOtherHubActionPath(dni, cmd, args)}",
 		query: null,
 		requestContentType: "application/json",
 		body: []
 	]
-
-	httpGet(requestParams) { response ->
-		def msg = ""
-		if (response?.status == 200) {
-			msg = "Success"
+	
+	try {	
+		httpGet(requestParams) { response ->
+			def msg = ""
+			if (response?.status == 200) {
+				msg = "Success"
+			}
+			else {
+				msg = "${response?.status}"
+			}
+			logDebug "Other Hub Response: ${msg} (${response.data})"
 		}
-		else {
-			msg = "${response?.status}"
-		}
-		logDebug "Hubitat Response: ${msg} (${response.data})"
+	}
+	catch (e) {
+		log.error "$e"
 	}
 }
 
-private buildHubitatActionPath(deviceId, cmd, args) {
+private buildOtherHubActionPath(deviceId, cmd, args) {
 	def path = "/action/${cmd}/${deviceId}"
 	if (args) {
 		path = "${path}/${args}"
 	}
-	return "${settings?.hubitatUrl}"?.replace("/?access_token", "${path}?access_token")
+	
+	return "${otherHubUrl}"?.replace("/?access_token", "${path}?access_token")
+}
+
+private getOtherHubUrl() {
+	if (!state.otherHubUrl && settings?.hubitatUrl) {
+		state.otherHubUrl = settings?.hubitatUrl
+		return settings?.hubitatUrl
+	}
+	else {
+		return state.otherHubUrl
+	}
 }
 
 private findChildByDeviceId(deviceId) {	
