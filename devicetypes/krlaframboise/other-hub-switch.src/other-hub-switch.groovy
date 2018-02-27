@@ -1,5 +1,5 @@
 /**
- *  SmartThings: Other Hub Switch v2.0
+ *  SmartThings: Other Hub Switch v2.0.1
  *
  *  Author: 
  *    Kevin LaFramboise (krlaframboise)
@@ -8,7 +8,7 @@
  *
  *  Changelog:
  *
- *    2.0 (02/26/2018)
+ *    2.0.1 (02/27/2018)
  *			- Initial Release
  *
  *
@@ -101,7 +101,6 @@ void off() {
 }
 
 void setLevel(level) {	
-	log.warn "$level"
 	executeCmd("setLevel", level)	
 }
 
