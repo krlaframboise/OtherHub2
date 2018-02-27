@@ -1,5 +1,5 @@
 /**
- *  HUBITAT: Other Hub Event Pusher v2.0
+ *  HUBITAT: Other Hub Event Pusher v2.0.1
  *
  *  Author: 
  *    Kevin LaFramboise (krlaframboise)
@@ -8,7 +8,7 @@
  *
  *  Changelog:
  *
- *    2.0 (02/26/2018)
+ *    2.0.1 (02/27/2018)
  *			- Initial Release
  *
  *
@@ -84,11 +84,14 @@ def main(){
 			}
 			
 			section("<h2>Hubitat Url</h2>") {
-				href "displayHubitatUrlPage", title: "Display Hubitat Url", description: "Displays the Hubitat Url in the Logs section of the dashboard."
-				href "refreshHubitatUrlPage", title: "Refresh Hubitat Url", description: "Disables the existing Hubitat Url and generates a new one."
+				href "displayHubitatUrlPage", title: "Send Hubitat Url to SmartThings", description: "You might need to click this if SmartThings is unable to send commands back to Hubitat."
+				href "refreshHubitatUrlPage", title: "Refresh Hubitat Url", description: "Disables the existing Hubitat Url, generates a new url, and sends it to SmartThings."
 			}
 									
 			section("<h2>Other Options</h2>") {
+				label(name: "label",
+						title: "Assign a name to this SmartApp",
+						required: false)
 				input "debugLogging", "bool", 
 					title: "Enable debug logging?", 
 					defaultValue: true, 
@@ -98,18 +101,12 @@ def main(){
 	)
 }
 
-private getAccessTokenActionHref() {
-	if (!state.accessToken) {
-		href "createAccessTokenPage", title: "Create Access Token", description: ""
-	} 
-	else {
-		href "revokeAccessTokenPage", title: "Revoke Access Token", description: ""
-	}
-}
-
 private displayHubitatUrlPage() {
 	dynamicPage(name: "displayHubitatUrlPage", title: "") {
 		section() {
+		
+			postHubitatUrlToSmartThings()
+		
 			paragraph "The Hubitat Url has been displayed in the Logs"
 			log.info "Hubitat Url: ${hubitatUrl}"
 		}
@@ -122,8 +119,8 @@ private refreshHubitatUrlPage() {
 			disableAppEndpoint()
 			paragraph "The old Hubitat url has been disabled!"	
 			
-			if (initializeAppEndpoint()) {				
-				paragraph "A new Hubitat url has been created!"
+			if (initializeAppEndpoint()) {
+				paragraph "A new Hubitat url has been created and sent to SmartThings!"				
 			} 
 			else {
 				paragraph "Please go to the Apps Code section of Hubitat, click 'Other Hub Event Pusher', Click OAuth, and then Enable.", title: "Please enable OAuth for Other Hub Event Pusher", required: true, state: null
@@ -150,6 +147,7 @@ private initializeAppEndpoint() {
 	if (!state.accessToken) {
 		try {			
 			state.accessToken = createAccessToken()
+			postHubitatUrlToSmartThings()
 		} 
 		catch(e) {
 			log.error "$e"
@@ -244,9 +242,18 @@ def refreshDevices() {
 	}	
 }
 
+private postHubitatUrlToSmartThings() {	
+	def data = [url: "${hubitatUrl}".replace("https://", "")]
+	postDataToSmartThings("update-other-hub-url", data)	
+}
+
 private postDeviceDataToSmartThings(data) {
+	postDataToSmartThings("refresh-devices", data)
+}
+
+private postDataToSmartThings(path, data) {
 	def requestParams = [
-		uri:  "${smartThingsUri}${smartThingsRelativePath}/refresh-devices",
+		uri:  "${smartThingsUri}${smartThingsRelativePath}/${path}",
 		query: null,
 		requestContentType: "application/json",
 		body: data
@@ -278,8 +285,10 @@ private getDeviceData(device) {
 private getDeviceAttributes(device) {
 	def attributes = [:]
 	supportedAttributes.each {	
-		if (device.hasAttribute(it)) {
-			attributes["$it"] = device.currentValue("$it")
+		if (device.hasAttribute(it)) {		
+			if (device.currentValue("$it") != null) {
+				attributes["$it"] = device.currentValue("$it")
+			}
 		}
 	}
 	return attributes
