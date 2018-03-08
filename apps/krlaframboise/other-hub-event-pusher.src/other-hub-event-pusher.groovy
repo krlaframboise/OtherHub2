@@ -1,5 +1,5 @@
 /**
- *  HUBITAT: Other Hub Event Pusher v2.0.1
+ *  HUBITAT: Other Hub Event Pusher v2.0.2
  *
  *  Author: 
  *    Kevin LaFramboise (krlaframboise)
@@ -8,6 +8,8 @@
  *
  *  Changelog:
  *
+ *    2.0.2 (03/08/2018)
+ *			- Added ability to set different sets of scheduled and real-time devices
  *    2.0.1 (02/27/2018)
  *			- Initial Release
  *
@@ -36,6 +38,8 @@ preferences {
 	page(name: "main")
 	page(name: "displayHubitatUrlPage")
 	page(name: "refreshHubitatUrlPage")
+	page(name: "scheduledIntegrationPage")
+	page(name: "realTimeIntegrationPage")
 }
 
 def main(){
@@ -47,40 +51,9 @@ def main(){
 				input "smartThingsUrl", "text", title:"Enter the SmartThings Dashboard URL:", required: true
 			}
 			
-			section("<h2>Select Integrated Devices</h2>") {
-				paragraph "A device may appear in multiple lists below, but you only have to select each device once.",title: "Display which devices in SmartThings?"
-									
-				supportedCapabilities.each {				
-					input "${it.prefType}Devices",
-						"capability.${it.prefType}", 
-						title: "${it.name} Devices:", 
-						hideWhenEmpty: true,
-						submitOnChange: true,
-						required: false, 
-						multiple: true
-				}				
-			}
-			
-			section("<h2>Scheduled Integration</h2>") {
-				input "refreshInterval", "enum",
-					title: "How oftens hould the device data get refreshed?",
-					defaultValue: "Disabled",
-					required: false,
-					displayDuringSetup: true,
-					options: refreshIntervalOptions.collect { it.name }
-			}
-			
-			section("<h2>Real-time Integration</h2>") {
-				input "subscribedAttributes", "enum", 
-						title: "Push these events to SmartThings as they happen:", 
-						required: false, 
-						multiple: true,
-						options: supportedAttributes
-				
-				input "eventPushEnabled", "bool", 
-					title: "Real-time Integration Enabled?", 
-					defaultValue: true, 
-					required: false
+			section("<h2>Integration Preferences</h2>") {
+				href "scheduledIntegrationPage", title: "Set Scheduled Integration Preferences", description: "Set devices that you would like to synchronize with SmartThings on a scheduled basis."
+				href "realTimeIntegrationPage", title: "Set Real-time Integration Preferences", description: "Set devices that you would like to synchronize with SmartThings on a real-time basis."
 			}
 			
 			section("<h2>Hubitat Url</h2>") {
@@ -99,6 +72,64 @@ def main(){
 			}
 		}
 	)
+}
+
+private scheduledIntegrationPage() {
+	dynamicPage(name: "scheduledIntegrationPage", title: "") {
+		section("<h2>Scheduled Integration</h2>") {
+			input "refreshInterval", "enum",
+				title: "How often should the device data get refreshed?",
+				defaultValue: "Disabled",
+				required: false,
+				displayDuringSetup: true,
+				options: refreshIntervalOptions.collect { it.name }
+		}
+	
+		section("<h2>Select Integrated Devices</h2>") {
+			paragraph "A device may appear in multiple lists below, but you only have to select each device once.",title: "Display which devices in SmartThings?"
+								
+			supportedCapabilities.each {				
+				input "${it.prefType}SchDevices",
+					"capability.${it.prefType}", 
+					title: "${it.name} Devices:", 
+					hideWhenEmpty: true,
+					submitOnChange: true,
+					required: false, 
+					multiple: true
+			}				
+		}
+	}
+}
+
+private realTimeIntegrationPage() {
+	dynamicPage(name: "realTimeIntegrationPage", title: "") {
+		section("<h2>Real-time Integration</h2>") {
+			input "eventPushEnabled", "bool", 
+				title: "Real-time Integration Enabled?", 
+				defaultValue: false, 
+				required: false
+			
+			input "subscribedAttributes", "enum", 
+				title: "Push these events to SmartThings as they happen:", 
+				required: false, 
+				multiple: true,
+				options: supportedAttributes
+		}
+	
+		section("<h2>Select Integrated Devices</h2>") {
+			paragraph "A device may appear in multiple lists below, but you only have to select each device once.",title: "Display which devices in SmartThings?"
+								
+			supportedCapabilities.each {				
+				input "${it.prefType}RTDevices",
+					"capability.${it.prefType}", 
+					title: "${it.name} Devices:", 
+					hideWhenEmpty: true,
+					submitOnChange: true,
+					required: false, 
+					multiple: true
+			}				
+		}
+	}
 }
 
 private displayHubitatUrlPage() {
@@ -186,7 +217,8 @@ def initialize() {
 
 private subscribeToPushEvents() {
 	if (eventPushEnabled) {	
-		def devices = allDevices
+		def devices = allRTDevices
+		refreshRTDevices()
 		
 		supportedCapabilities.each {		
 			if (settings?.subscribedAttributes && it.attributeName in settings?.subscribedAttributes) {
@@ -201,6 +233,19 @@ private subscribeToPushEvents() {
 	else {
 		log.warn "Event Push is Disabled."
 	}
+}
+
+def refreshRTDevices() {
+	def deviceData = []
+	
+	allRTDevices?.each {
+		deviceData << getDeviceData(it)		
+	}
+	
+	if (deviceData) {
+		logDebug "Sending Real-time ${deviceData?.size()} Devices to SmartThings"		
+		postDeviceDataToSmartThings(deviceData)
+	}	
 }
 
 private scheduleDeviceRefresh() {
@@ -232,12 +277,12 @@ private scheduleDeviceRefresh() {
 def refreshDevices() {
 	def deviceData = []
 	
-	allDevices?.each {
+	allSchDevices?.each {
 		deviceData << getDeviceData(it)		
 	}
 	
 	if (deviceData) {
-		logDebug "Sending ${deviceData?.size()} Devices to SmartThings"		
+		logDebug "Sending Scheduled ${deviceData?.size()} Devices to SmartThings"		
 		postDeviceDataToSmartThings(deviceData)
 	}	
 }
@@ -300,17 +345,25 @@ private getDeviceLastActivity(device) {
 	}?.sort()?.last()
 }
 
-private getAllDevices() {
+private getAllSchDevices() {
 	def devices = []
 	supportedCapabilities.each {
-		devices += getDevicesByCapability(it)
+		devices += getDevicesByCapability(it, "Sch")
 	}		
 	return devices?.unique{ it.deviceNetworkId }
 }
 
-private getDevicesByCapability(capability) {
-	if (settings && settings["${capability.prefType}Devices"]) {
-		return settings["${capability.prefType}Devices"]
+private getAllRTDevices() {
+	def devices = []
+	supportedCapabilities.each {
+		devices += getDevicesByCapability(it, "RT")
+	}		
+	return devices?.unique{ it.deviceNetworkId }
+}
+
+private getDevicesByCapability(capability, integrationType) {
+	if (settings && settings["${capability.prefType}${integrationType}Devices"]) {
+		return settings["${capability.prefType}${integrationType}Devices"]
 	}
 	else {
 		return []
@@ -518,7 +571,7 @@ private safeToInt(val, defaultVal=-1) {
 }
 
 private logDebug(msg) {
-	if (settings?.traceLogging != false) {
+	if (settings?.debugLogging != false) {
 		log.debug "$msg"
 	}
 }
@@ -590,5 +643,8 @@ private api_action() {
 }
 
 private findDeviceByDNI(dni) {
+	def allDevices = []
+	allDevices += allSchDevices
+	allDevices += allRTDevices
 	return allDevices?.find { "${it.deviceNetworkId}" == "$dni" }
 }
