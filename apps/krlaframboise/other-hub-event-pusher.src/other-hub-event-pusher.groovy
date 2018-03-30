@@ -1,5 +1,5 @@
 /**
- *  HUBITAT: Other Hub Event Pusher v2.0.1
+ *  HUBITAT: Other Hub Event Pusher v2.0.2
  *
  *  Author: 
  *    Kevin LaFramboise (krlaframboise)
@@ -7,6 +7,9 @@
  *	Donations: https://www.paypal.me/krlaframboise
  *
  *  Changelog:
+ *
+ *    2.0.2 (03/25/2018)
+ *			- Added delay to real-time integration.
  *
  *    2.0.1 (02/27/2018)
  *			- Initial Release
@@ -81,6 +84,11 @@ def main(){
 					title: "Real-time Integration Enabled?", 
 					defaultValue: true, 
 					required: false
+				input "delayedPushEnabled", "bool", 
+					title: "Delayed Push Enabled?",
+					defaultValue: true, 
+					required: false
+				paragraph "<em><strong>WARNING!</strong>You should keep 'Delayed Push' enabled.  Disabling it makes the Other Hub devices in SmartThings update faster, but it can cause your Hubitat devices and Apps to execute slower.</em>"
 			}
 			
 			section("<h2>Hubitat Url</h2>") {
@@ -438,10 +446,24 @@ private getSupportedCapabilities() {
 }
 
 def handleDeviceEvent(evt) {
-	// logDebug "handleDeviceEvent: ${evt.device?.displayName} ${evt.name} ${evt.value}"
+	if (evt) {
+		def data = [name:evt.name, value:evt.value, deviceName: evt.device?.displayName, deviceDni: evt.device?.deviceNetworkId]
+		
+		if (settings?.delayedPushEnabled != false) {
+			logTrace "Scheduling pushEvent(${data})"
+			runIn(1, pushEvent, [overwrite: false, data: data])
+		}
+		else {
+			pushEvent(data)
+		}
+	}
+}
+
+def pushEvent(data) {
+	// logDebug "pushEvent(${data})"
 			
 	def uri = smartThingsUri
-	def path = "${smartThingsRelativePath}/event/${evt.name}/${evt.value}/${evt.device.deviceNetworkId}"
+	def path = "${smartThingsRelativePath}/event/${data.name}/${data.value}/${data.deviceDni}"
 	
 	if (uri) {
 		def params = [
@@ -449,7 +471,7 @@ def handleDeviceEvent(evt) {
 			path: "${path}"
 		]
 		
-		def msg = "Pushing ${evt.name} ${evt.value} to ${evt.device?.displayName}(${evt.device?.deviceNetworkId})"
+		def msg = "Pushing ${data.name} ${data.value} to ${data.deviceName}(${data.deviceDni})"
 		try {
 			httpGet(params) { resp ->
 				logDebug "${msg} Response: ${resp?.status}"
@@ -462,6 +484,7 @@ def handleDeviceEvent(evt) {
 		log.warn "${smartThingsUrl} is not a valid SmartThings Url."
 	}
 }
+
 
 private getSmartThingsUri() {
 	return urlRemoveAfterAtText(smartThingsUrl, "/api/token/")
@@ -517,17 +540,9 @@ private safeToInt(val, defaultVal=-1) {
 	return "${val}"?.isInteger() ? "${val}".toInteger() : defaultVal
 }
 
-private logDebug(msg) {
-	if (settings?.traceLogging != false) {
-		log.debug "$msg"
-	}
-}
-
-
 private getHubitatUrl() {
 	def path = ""
 	return "${fullApiServerUrl(path)}?access_token=${state.accessToken}"
-	// return "${fullLocalApiServerUrl(path)}?access_token=${state.accessToken}"
 }
 
 mappings {
@@ -591,4 +606,15 @@ private api_action() {
 
 private findDeviceByDNI(dni) {
 	return allDevices?.find { "${it.deviceNetworkId}" == "$dni" }
+}
+
+
+private logDebug(msg) {
+	if (settings?.traceLogging != false) {
+		log.debug "$msg"
+	}
+}
+
+private logTrace(msg) {
+	// log.trace "$msg"
 }
