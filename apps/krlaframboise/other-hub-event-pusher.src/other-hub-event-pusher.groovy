@@ -1,5 +1,5 @@
 /**
- *  HUBITAT: Other Hub Event Pusher v2.0.2
+ *  HUBITAT: Other Hub Event Pusher v2.1
  *
  *  Author: 
  *    Kevin LaFramboise (krlaframboise)
@@ -7,6 +7,9 @@
  *	Donations: https://www.paypal.me/krlaframboise
  *
  *  Changelog:
+ *
+ *    2.1 (10/20/2018)
+ *			- Added PushableButton
  *
  *    2.0.2 (03/25/2018)
  *			- Added delay to real-time integration.
@@ -401,6 +404,11 @@ private getSupportedCapabilities() {
 			name: "Presence Sensor",
 			prefType: "presenceSensor",
 			attributeName: "presence"
+		],
+		[
+			name: "PushableButton",
+			prefType: "pushableButton",
+			attributeName: "pushed"
 		],
 		[
 			name: "Relative Humidity Measurement",	
