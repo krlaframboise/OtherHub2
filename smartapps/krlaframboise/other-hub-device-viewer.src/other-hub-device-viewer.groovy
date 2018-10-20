@@ -1,5 +1,5 @@
 /**
- *  SmartThings: Other Hub Device Viewer v2.0.1
+ *  SmartThings: Other Hub Device Viewer v2.1
  *
  *  Author: 
  *    Kevin LaFramboise (krlaframboise)
@@ -7,6 +7,9 @@
  *	Donations: https://www.paypal.me/krlaframboise
  *
  *  Changelog:
+ *
+ *    2.1 (10/20/2018)
+ *			- Added support for Alexa Triggers
  *
  *    2.0.1 (02/27/2018)
  *			- Initial Release
@@ -1895,6 +1898,10 @@ private updateChildDeviceData(deviceData) {
 private sendChildDataEvents(child, data) {
 	if (data?.attrs) {
 		sendChildEvent(child, "status", getChildStatus(data.attrs))
+		
+		if (data?.attrs?.held || data?.attrs?.pushed) {
+			sendChildButtonEvents(child, data)
+		}
 
 		deviceRefreshCapabilities.each {		
 			def val = data?.attrs?."${it.attributeName}"
@@ -1911,6 +1918,20 @@ private sendChildDataEvents(child, data) {
 	
 	if (data) {
 		sendChildEvent(child, "otherHubData", groovy.json.JsonOutput.toJson(data))
+	}
+}
+
+private sendChildButtonEvents(child, data) {
+	if (data?.attrs?.pushed) {
+		
+		if (child.hasCommand("setLevel")) {
+			logDebug "Activating Alexa Trigger #${data.attrs.pushed}"
+			child.setLevel(data.attrs.pushed)
+		}
+		
+		if (child.hasAttribute("button")) {
+			child.sendEvent(name:"button", value: "pushed", data:[buttonNumber:data?.attrs?.pushed])
+		}			
 	}
 }
 
@@ -1935,8 +1956,7 @@ private getChildStatus(attrs) {
 
 private sendChildCapabilityEvent(child, capName, attrName, value) {
 	if (child.hasCapability("${capName}")) {		
-		if (value) {
-	
+		if (value) {	
 			def oldValue = child."current${attrName.capitalize()}"
 			if ("${oldValue}" != "$value") {
 			
@@ -1946,8 +1966,7 @@ private sendChildCapabilityEvent(child, capName, attrName, value) {
 					if (child?.hasCommand("refreshAlarmStatus")) {
 						child.refreshAlarmStatus()
 					}		
-				}
-				
+				}				
 			}
 		}
 	}
