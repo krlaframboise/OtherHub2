@@ -1,5 +1,5 @@
 /**
- *  HUBITAT: Other Hub Event Pusher v2.1
+ *  HUBITAT: Other Hub Event Pusher v2.1.1
  *
  *  Author: 
  *    Kevin LaFramboise (krlaframboise)
@@ -7,6 +7,9 @@
  *	Donations: https://www.paypal.me/krlaframboise
  *
  *  Changelog:
+ *
+ *    2.1.1 (10/21/2018)
+ *			- Bug fix
  *
  *    2.1 (10/20/2018)
  *			- Added PushableButton
@@ -306,9 +309,15 @@ private getDeviceAttributes(device) {
 }
 
 private getDeviceLastActivity(device) {
-	return device?.supportedAttributes?.collect { 
+	def attrs = device?.supportedAttributes?.collect { 
 		device.currentState("$it")?.date?.time		
-	}?.sort()?.last()
+	}
+	if (attrs) {
+		return attrs.sort().last()
+	}
+	else {
+		return 0
+	}	
 }
 
 private getAllDevices() {
