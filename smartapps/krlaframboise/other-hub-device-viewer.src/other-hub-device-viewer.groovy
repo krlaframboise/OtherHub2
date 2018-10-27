@@ -1,5 +1,5 @@
 /**
- *  SmartThings: Other Hub Device Viewer v2.1
+ *  SmartThings: Other Hub Device Viewer v2.1.1
  *
  *  Author: 
  *    Kevin LaFramboise (krlaframboise)
@@ -7,6 +7,9 @@
  *	Donations: https://www.paypal.me/krlaframboise
  *
  *  Changelog:
+ *
+ *    2.1.1 (10/26/2018)
+ *			- Fix for button device creation.
  *
  *    2.1 (10/20/2018)
  *			- Added support for Alexa Triggers
@@ -1850,13 +1853,17 @@ private updateChildDeviceData(deviceData) {
 	
 	def attrs = deviceData.attributes ?: null
 	def caps = attrs ? getCapabilities(attrs) : null
-	if (attrs && caps) {
+	if (attrs && caps || "${attrs}".contains("pushed")) {
 	
 		def child = findChildByDeviceId("${deviceData.id}")		
 		if (!child) {
 			def deviceType = childDeviceTypes.find { devTypes -> 
 				devTypes.capabilities.find { it in caps }
 			}?.name
+			
+			if (!deviceType && "${attrs}".contains("pushed")) {
+				deviceType = "Other Hub Button"
+			}
 			
 			if (deviceType) {
 				logTrace "Adding ${deviceType}: ${deviceData.name}"
