@@ -1,5 +1,5 @@
 /**
- *  HUBITAT: Other Hub Event Pusher v2.1.1
+ *  HUBITAT: Other Hub Event Pusher v2.2.0
  *
  *  Author: 
  *    Kevin LaFramboise (krlaframboise)
@@ -7,6 +7,10 @@
  *	Donations: https://www.paypal.me/krlaframboise
  *
  *  Changelog:
+ *
+ *    2.2.0 (12/27/2018) Arn Burkhoff
+ *			- Added: Execute Smarthings routine when mode changes
+ *			- Bug fix: debug logging not longer logs when shut off  
  *
  *    2.1.1 (10/21/2018)
  *			- Bug fix
@@ -69,6 +73,19 @@ def main(){
 						multiple: true
 				}				
 			}
+
+			section("<h2>Select Modes</h2>") 
+				{
+				paragraph "Execute Smarthings Routines on Hubitat Mode Change (case and punctuation sensitive).",title: "Set routines in SmartThings?"
+			    location.modes.each()
+			    	{
+					input "mode${it}",
+						"text",
+						title: "Execute this routine in Smarthings for ${it}:", 
+						required: false, 
+						multiple: false
+					}				
+				}
 			
 			section("<h2>Scheduled Integration</h2>") {
 				input "refreshInterval", "enum",
@@ -192,10 +209,12 @@ def updated() {
 
 def initialize() {
 	logDebug "initialize()"
-	
 	initializeAppEndpoint()
 	subscribeToPushEvents()
 	scheduleDeviceRefresh()
+	if(eventPushEnabled)
+		subscribe (location, "mode", handleModeChange)
+
 }
 
 private subscribeToPushEvents() {
@@ -476,6 +495,34 @@ def handleDeviceEvent(evt) {
 	}
 }
 
+def handleModeChange(evt)
+	{
+	logDebug "handleModeChange entered Name: ${evt.name} Value:${evt.value} Source:${evt?.source} Device:${evt?.device} Event: ${evt}"
+	def	theModeName='mode'+evt.value
+	def passing=""
+	def b64v
+	def b64d
+	if ("mode${evt.value}")
+		{
+		passing=settings."mode${evt.value}"
+		if (passing > "")
+			{
+			b64v=URLEncoder.encode(passing, "UTF-8");				//url encode due to spaces and punctuation
+			b64d=URLEncoder.encode(evt.value, "UTF-8");				//url encode due to spaces and punctuation	
+			logDebug "Mode setting: ${theModeName} pushing routine ${passing} to Smartthings as ${b64v} ${b64d}"
+/*				name & deviceName is evt.name, should always be "mode"
+				value is the user routine to execute, url encoded
+				deviceDNI is original HE mode, url encoded
+*/			def data = [name:evt.name, value:b64v, deviceName: evt.name, deviceDni: b64d]
+			pushEvent(data)
+			}
+		else
+			logDebug "Mode setting for ${theModeName} not sent, it is null"
+		}
+	else
+		log.error "Other Hub Event Pusher: mode setting not found for ${evt.value}, adjust mode data, then save app settings"
+	}	
+
 def pushEvent(data) {
 	// logDebug "pushEvent(${data})"
 			
@@ -626,11 +673,11 @@ private findDeviceByDNI(dni) {
 }
 
 
-private logDebug(msg) {
-	if (settings?.traceLogging != false) {
+private logDebug(msg)
+	{
+	if (debugLogging)
 		log.debug "$msg"
 	}
-}
 
 private logTrace(msg) {
 	// log.trace "$msg"
