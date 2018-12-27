@@ -1,5 +1,5 @@
 /**
- *  SmartThings: Other Hub Device Viewer v2.1.1
+ *  SmartThings: Other Hub Device Viewer v2.2.0
  *
  *  Author: 
  *    Kevin LaFramboise (krlaframboise)
@@ -7,6 +7,9 @@
  *	Donations: https://www.paypal.me/krlaframboise
  *
  *  Changelog:
+ *
+ *    2.2.0 (12/27/2018) Arn Burkhoff
+ *			- Added support for HE mode change, executes a ST routine
  *
  *    2.1.1 (10/26/2018)
  *			- Fix for button device creation.
@@ -1468,9 +1471,21 @@ mappings {
 }
 
 private api_event() {
+	log.debug "Device ${params?.deviceId} ${params?.name} is ${params?.value}"
 	// logDebug "Device ${params?.deviceId} ${params?.name} is ${params?.value}"
-	childEvent("${params?.deviceId}", "${params?.name}", params.value)
-	return []
+	if (params?.name=='mode')
+		{
+		def STroutine=URLDecoder.decode(params.value, "UTF-8");				//url decode
+		def HEmode=URLDecoder.decode(params.deviceId, "UTF-8");				//url decode
+		log.debug "HE Mode ${HEmode} executing Routine ${STroutine}"
+		location.helloHome?.execute(STroutine)
+		return []
+		}
+	else
+		{
+		childEvent("${params?.deviceId}", "${params?.name}", params.value)
+		return []
+		}
 }
 
 private api_dashboardUrl(capName=null) {	
