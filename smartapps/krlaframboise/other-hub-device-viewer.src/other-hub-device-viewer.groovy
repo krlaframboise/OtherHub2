@@ -1,5 +1,5 @@
 /**
- *  SmartThings: Other Hub Device Viewer v2.2.0
+ *  SmartThings: Other Hub Device Viewer
  *
  *  Author: 
  *    Kevin LaFramboise (krlaframboise)
@@ -7,6 +7,10 @@
  *	Donations: https://www.paypal.me/krlaframboise
  *
  *  Changelog:
+ *	
+ *    2.2.1 (12/28/2018) Arn Burkhoff
+ *			- Added: Push routine names from SmartThings for use with HE mode change logic into IDE log 
+ *			- Added: Dynamic version number on description (cant use it on module name)
  *
  *    2.2.0 (12/27/2018) Arn Burkhoff
  *			- Added support for HE mode change, executes a ST routine
@@ -35,11 +39,16 @@
  *  permissions and limitations under the License.
  *
  */
+def version()
+	{
+	return "2.2.1";
+	}
+
 definition(
     name: "Other Hub Device Viewer",
     namespace: "krlaframboise",
     author: "Kevin LaFramboise",
-    description: "Provides information about the state of the specified devices from a different hub.",
+    description: "${version()} Provides information about the state of the specified devices from a different hub.",
     category: "My Apps",
 		iconUrl: "https://raw.githubusercontent.com/krlaframboise/Resources/master/simple-device-viewer/other-hub-device-viewer-icon.png",
     iconX2Url: "https://raw.githubusercontent.com/krlaframboise/Resources/master/simple-device-viewer/other-hub-device-viewer-icon-2x.png",
@@ -51,7 +60,8 @@ definition(
 	page(name:"thresholdsPage")
 	page(name:"notificationsPage")
 	page(name:"otherSettingsPage")
-	page(name: "displaySmartThingsUrlPage")
+	page(name: "displaySmartThingsUrlPage", nextPage: "mainPage")
+	page(name: "displaySmartThingsRoutinesPage", nextPage: "mainPage")
 	page(name: "refreshSmartThingsUrlPage")	
 	page(name: "refreshSmartThingsUrlConfirmPage")		
 }
@@ -101,8 +111,10 @@ def mainPage() {
 					href "displaySmartThingsUrlPage", title: "Display SmartThings Dashboard Url", description: "Displays the url in the Live Logging section of the IDE."
 				}
 				href "refreshSmartThingsUrlConfirmPage", title: "Refresh SmartThings Dashboard Url", description: "Disables the existing url and generates a new one."
+ 				href "displaySmartThingsRoutinesPage", title: "Tap to display your SmartThings Routine Names in Live Logging of the IDE", description: "Copy with brackets, then Paste into Pusher Module's ST Routines field."
 			}			
 			
+				
 			section("Settings") {
 				if (deviceCount) {
 					getPageLink("displaySettingsLink",
@@ -418,6 +430,17 @@ private displaySmartThingsUrlPage() {
 		section() {
 			paragraph "The SmartThings Dashboard Url has been displayed in Live Logging"
 			displaySmartThingsUrl()
+		}
+	}
+}
+
+private displaySmartThingsRoutinesPage() {
+	dynamicPage(name: "displaySmartThingsRoutinesPage", title: "") {
+		section() {
+			paragraph "The SmartThings Routine Names shown below have been displayed in Live Logging"
+			paragraph "Copy brackets and routines names into Pusher module, Routines input field"  	
+			paragraph "${location.helloHome?.getPhrases()*.label}"
+			log.info "SmartThings Routines: ${location.helloHome?.getPhrases()*.label}"	
 		}
 	}
 }
