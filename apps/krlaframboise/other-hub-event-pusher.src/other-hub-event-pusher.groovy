@@ -1,5 +1,5 @@
 /**
- *  HUBITAT: Other Hub Event Pusher v2.2.0
+ *  HUBITAT: Other Hub Event Pusher
  *
  *  Author: 
  *    Kevin LaFramboise (krlaframboise)
@@ -8,9 +8,14 @@
  *
  *  Changelog:
  *
+ *    2.2.1 (12/28/2018) Arn Burkhoff
+ *			- Added: Allow user to paste routine names from SmartThings Viewer module, then use in Input selection
+ *			- Added: Dynamcic version number on description (cant use it on module name)
+ *			- TBD: Dynamic set the routines without user intervention
+ *
  *    2.2.0 (12/27/2018) Arn Burkhoff
  *			- Added: Execute Smarthings routine when mode changes
- *			- Bug fix: debug logging not longer logs when shut off  
+ *			- Bug fix: debug logging no longer logs when debug flag is shut off  
  *
  *    2.1.1 (10/21/2018)
  *			- Bug fix
@@ -34,11 +39,16 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  */
+def version()
+	{
+	return "2.2.1";
+	}
+
 definition(
     name: "Other Hub Event Pusher",
     namespace: "krlaframboise",
     author: "Kevin LaFramboise",
-    description: "Pushes events to external url",
+    description: "${version()} Pushes events to external url",
     category: "Convenience",
     iconUrl: "https://s3.amazonaws.com/smartapp-icons/Convenience/Cat-Convenience.png",
     iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Convenience/Cat-Convenience@2x.png",
@@ -74,18 +84,38 @@ def main(){
 				}				
 			}
 
-			section("<h2>Select Modes</h2>") 
+			section("<h2>HE Modes Change Executes a SmartThings Routine</h2>") 
 				{
-				paragraph "Execute Smarthings Routines on Hubitat Mode Change (case and punctuation sensitive).",title: "Set routines in SmartThings?"
-			    location.modes.each()
-			    	{
-					input "mode${it}",
-						"text",
-						title: "Execute this routine in Smarthings for ${it}:", 
-						required: false, 
-						multiple: false
-					}				
-				}
+				paragraph "Optionally execute a SmartThings Routine when Hubitat Mode Changes, allows HE to control ST Armed State and Mode."
+				input "smartThingsRoutines", "text", title: "Paste Viewer routine names displayed in ST IDE Log, or enter the SmartThings Routine Names (warning: case and punctuation sensitive)",
+					required: false, submitOnChange: true, description: "routine_name, routine_name, ..., routine_name"
+				if (smartThingsRoutines)					
+					{
+					def str=smartThingsRoutines.replace('[', '')
+					str=str.replace(']', '')
+					def rtnList = str.split(', *')
+//					log.debug "${rtnList}"
+					location.modes.each()
+			    		{
+						input "mode${it}",
+							"enum",
+							title: "Execute this routine in SmartThings for ${it} (Optional):", 
+							required: false, 
+							options: rtnList
+						}				
+					}
+				else
+					{
+					location.modes.each()
+			    		{
+						input "mode${it}",
+							"text",
+							title: "Execute this routine in SmartThings for ${it} (Optional):", 
+							required: false, 
+							multiple: false
+						}				
+					}
+				}	
 			
 			section("<h2>Scheduled Integration</h2>") {
 				input "refreshInterval", "enum",
