@@ -8,10 +8,12 @@
  *
  *  Changelog:
  *
+ *    2.2.2 (12/29/2018) Arn Burkhoff
+ *			- Added: Auto fetch Routine names from SmartThings
+ *
  *    2.2.1 (12/28/2018) Arn Burkhoff
- *			- Added: Allow user to paste routine names from SmartThings Viewer module, then use in Input selection
+ *			- Added: Get routine names from SmartThings and use in Input selection
  *			- Added: Dynamcic version number on description (cant use it on module name)
- *			- TBD: Dynamic set the routines without user intervention
  *
  *    2.2.0 (12/27/2018) Arn Burkhoff
  *			- Added: Execute Smarthings routine when mode changes
@@ -41,7 +43,7 @@
  */
 def version()
 	{
-	return "2.2.1";
+	return "2.2.2";
 	}
 
 definition(
@@ -84,14 +86,42 @@ def main(){
 				}				
 			}
 
-			section("<h2>HE Modes Change Executes a SmartThings Routine</h2>") 
+			section("<h2>Push HE Modes to SmartThings Routine</h2>") 
 				{
+				def newsmartThingsRoutines=false
 				paragraph "Optionally execute a SmartThings Routine when Hubitat Mode Changes, allows HE to control ST Armed State and Mode."
-				input "smartThingsRoutines", "text", title: "Paste Viewer routine names displayed in ST IDE Log, or enter the SmartThings Routine Names (warning: case and punctuation sensitive)",
-					required: false, submitOnChange: true, description: "routine_name, routine_name, ..., routine_name"
-				if (smartThingsRoutines)					
+				if (smartThingsRoutines)
 					{
-					def str=smartThingsRoutines.replace('[', '')
+					input "smartThingsRoutines", "text", title: "Routine names used in SmartThings (warning: case and punctuation sensitive)",
+						required: false, submitOnChange: true, description: "routine_name, routine_name, ..., routine_name"
+					}
+				else
+					{
+					def data = [name:"routines", value:"routines", deviceName: "routines", deviceDni: "routines"]
+					newsmartThingsRoutines=pushEvent(data)
+					logDebug "Smartthings routines ${newsmartThingsRoutines}" 
+					if (newsmartThingsRoutines)
+						{
+						input "smartThingsRoutines", "text", title: "Routines names auto posted from SmartThings (warning: case and punctuation sensitive)",
+							required: false, submitOnChange: true, defaultValue: "${newsmartThingsRoutines}"
+						}
+					else
+						{
+						input "smartThingsRoutines", "text", title: "Paste Viewer routine names displayed in ST IDE Log, or enter the SmartThings Routine Names (warning: case and punctuation sensitive)",
+							required: false, submitOnChange: true, description: "routine_name, routine_name, ..., routine_name"
+						}
+					}	
+					
+				def wkRoutines=false 
+				if (smartThingsRoutines)
+					wkRoutines=smartThingsRoutines
+				else
+				if (newsmartThingsRoutines)
+					wkRoutines="${newsmartThingsRoutines}"	
+					
+				if	(wkRoutines)	
+					{
+					def str=wkRoutines.replace('[', '')
 					str=str.replace(']', '')
 					def rtnList = str.split(', *')
 //					log.debug "${rtnList}"
@@ -569,7 +599,14 @@ def pushEvent(data) {
 		try {
 			httpGet(params) { resp ->
 				logDebug "${msg} Response: ${resp?.status}"
-			}
+				if (data.name=='routines')
+					{
+					if (resp?.status == 200)
+						return resp.data
+					else
+						return false
+					}	
+				}
 		} catch (e) {
 			log.error "${msg} Error: $e"
 		}
