@@ -10,6 +10,7 @@
  *
  *    2.2.2 (12/29/2018) Arn Burkhoff
  *			- Added: Auto fetch Routine names from SmartThings
+ *			- fixed: Auto fetch no occuring when URL entered. Add submitonchange to ST URL
  *
  *    2.2.1 (12/28/2018) Arn Burkhoff
  *			- Added: Get routine names from SmartThings and use in Input selection
@@ -69,7 +70,7 @@ def main(){
 			section("<h2>SmartThings Other Hub Device Viewer Dashboard URL</h2>") {
 				paragraph "If you open the Dashboard in the SmartThings SmartApp Other Hub Device Viewer Dashboard, the url needed for the field below is shown in the textbox at the bottom of the page."
 				paragraph "The URL is also written to Live Logging when you open the Dashboard Settings"				
-				input "smartThingsUrl", "text", title:"Enter the SmartThings Dashboard URL:", required: true
+				input "smartThingsUrl", "text", title:"Enter the SmartThings Dashboard URL:", required: true, submitOnChange: true
 			}
 			
 			section("<h2>Select Integrated Devices</h2>") {
@@ -97,9 +98,12 @@ def main(){
 					}
 				else
 					{
-					def data = [name:"routines", value:"routines", deviceName: "routines", deviceDni: "routines"]
-					newsmartThingsRoutines=pushEvent(data)
-					logDebug "Smartthings routines ${newsmartThingsRoutines}" 
+					if (smartThingsUrl)
+						{
+						def data = [name:"routines", value:"routines", deviceName: "routines", deviceDni: "routines"]
+						newsmartThingsRoutines=pushEvent(data)
+						logDebug "Smartthings routines ${newsmartThingsRoutines}" 
+						}
 					if (newsmartThingsRoutines)
 						{
 						input "smartThingsRoutines", "text", title: "Routines names auto posted from SmartThings (warning: case and punctuation sensitive)",
@@ -107,7 +111,7 @@ def main(){
 						}
 					else
 						{
-						input "smartThingsRoutines", "text", title: "Paste Viewer routine names displayed in ST IDE Log, or enter the SmartThings Routine Names (warning: case and punctuation sensitive)",
+						input "smartThingsRoutines", "text", title: "Unable to auto fetch routine names. Enter ST URL above, or Paste Viewer routine names displayed in ST IDE Log, or enter the SmartThings Routine Names (warning: case and punctuation sensitive)",
 							required: false, submitOnChange: true, description: "routine_name, routine_name, ..., routine_name"
 						}
 					}	
