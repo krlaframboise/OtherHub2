@@ -8,6 +8,9 @@
  *
  *  Changelog:
  *	
+ *    2.2.2 (12/28/2018) Arn Burkhoff
+ *			- Added: Dynamic push to Hubitat of Routine Names 
+ *
  *    2.2.1 (12/28/2018) Arn Burkhoff
  *			- Added: Push routine names from SmartThings for use with HE mode change logic into IDE log 
  *			- Added: Dynamic version number on description (cant use it on module name)
@@ -41,7 +44,7 @@
  */
 def version()
 	{
-	return "2.2.1";
+	return "2.2.2";
 	}
 
 definition(
@@ -111,7 +114,7 @@ def mainPage() {
 					href "displaySmartThingsUrlPage", title: "Display SmartThings Dashboard Url", description: "Displays the url in the Live Logging section of the IDE."
 				}
 				href "refreshSmartThingsUrlConfirmPage", title: "Refresh SmartThings Dashboard Url", description: "Disables the existing url and generates a new one."
- 				href "displaySmartThingsRoutinesPage", title: "Tap to display your SmartThings Routine Names in Live Logging of the IDE", description: "Copy with brackets, then Paste into Pusher Module's ST Routines field."
+ 				href "displaySmartThingsRoutinesPage", title: "When routine name are not auto fetched in Pusher module, tap to display your SmartThings Routine Names in Live Logging of the IDE", description: "Copy with brackets, then Paste into Pusher Module's ST Routines field."
 			}			
 			
 				
@@ -1504,6 +1507,16 @@ private api_event() {
 		location.helloHome?.execute(STroutine)
 		return []
 		}
+	else
+	if (params?.name=='routines')
+		{
+		return location.helloHome?.getPhrases()*.label
+//	    def resp = []
+//	    location.helloHome?.getPhrases()*.label.each {
+//			resp << [name: it.displayName, value: it.currentValue("switch")]
+//    		}
+	    return resp
+	    }
 	else
 		{
 		childEvent("${params?.deviceId}", "${params?.name}", params.value)
