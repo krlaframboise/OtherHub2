@@ -8,6 +8,10 @@
  *
  *  Changelog:
  *
+ *    2.2.3 (01/02/2019) Arn Burkhoff
+ *			- change: remove ability for user entry of Routine names, separate routines for getroutines and push routines
+ *			- change: save ST routine names in atomicState field
+ *
  *    2.2.2 (12/29/2018) Arn Burkhoff
  *			- Added: Auto fetch Routine names from SmartThings
  *			- fixed: Auto fetch no occuring when URL entered. Add submitonchange to ST URL
@@ -44,7 +48,7 @@
  */
 def version()
 	{
-	return "2.2.2";
+	return "2.2.3";
 	}
 
 definition(
@@ -87,66 +91,50 @@ def main(){
 				}				
 			}
 
-			section("<h2>Push HE Modes to SmartThings Routine</h2>") 
+			section("<h2>Push HE Modes to SmartThings Routines</h2>") 
 				{
-				def newsmartThingsRoutines=false
-				paragraph "Optionally execute a SmartThings Routine when Hubitat Mode Changes, allows HE to control ST Armed State and Mode."
-				if (smartThingsRoutines)
+				input "modePushEnabled", "bool", 
+					title: "A Hubitat mode change executes a SmartThings Routine? Refresh routine names by setting off, then on", 
+					defaultValue: true,	required: true, submitOnChange: true
+				
+				if (modePushEnabled)
 					{
-					input "smartThingsRoutines", "text", title: "Routine names used in SmartThings (warning: case and punctuation sensitive)",
-						required: false, submitOnChange: true, description: "routine_name, routine_name, ..., routine_name"
-					}
-				else
-					{
+					def newsmartThingsRoutines=false
+					paragraph "Optionally execute a SmartThings Routine when Hubitat Mode Changes, allows HE to control ST Armed State and Mode."
+					if (atomicState?.stRoutines>null)
+						{}
+					else
 					if (smartThingsUrl)
 						{
-						def data = [name:"routines", value:"routines", deviceName: "routines", deviceDni: "routines"]
-						newsmartThingsRoutines=pushEvent(data)
-						logDebug "Smartthings routines ${newsmartThingsRoutines}" 
-						}
-					if (newsmartThingsRoutines)
-						{
-						input "smartThingsRoutines", "text", title: "Routines names auto posted from SmartThings (warning: case and punctuation sensitive)",
-							required: false, submitOnChange: true, defaultValue: "${newsmartThingsRoutines}"
+//						paragraph "Smartthings routines were fetched"
+						atomicState.stRoutines=null
+						newsmartThingsRoutines=getSmartThingsRoutines()
+						if (newsmartThingsRoutines)
+							{
+							newsmartThingsRoutines="${newsmartThingsRoutines}".replace('[', '')
+							newsmartThingsRoutines=newsmartThingsRoutines.replace(']', '')
+							atomicState.stRoutines=newsmartThingsRoutines
+							}
+						else
+							paragraph "Sorry, we were unable to get Routines from Smarthings. Please check the logs"
 						}
 					else
-						{
-						input "smartThingsRoutines", "text", title: "Unable to auto fetch routine names. Enter ST URL above, or Paste Viewer routine names displayed in ST IDE Log, or enter the SmartThings Routine Names (warning: case and punctuation sensitive)",
-							required: false, submitOnChange: true, description: "routine_name, routine_name, ..., routine_name"
-						}
+						paragraph "Please set the Smarthings Url to fetch Routine Names"
 					}	
-					
-				def wkRoutines=false 
-				if (smartThingsRoutines)
-					wkRoutines=smartThingsRoutines
 				else
-				if (newsmartThingsRoutines)
-					wkRoutines="${newsmartThingsRoutines}"	
-					
-				if	(wkRoutines)	
+					atomicState.stRoutines=null
+
+				if (modePushEnabled && atomicState?.stRoutines>null)
 					{
-					def str=wkRoutines.replace('[', '')
-					str=str.replace(']', '')
-					def rtnList = str.split(', *')
-//					log.debug "${rtnList}"
+					paragraph "SmartThings Routines: ${atomicState.stRoutines}"
+					def rtnList = atomicState.stRoutines.split(', *')
 					location.modes.each()
-			    		{
+						{
 						input "mode${it}",
 							"enum",
 							title: "Execute this routine in SmartThings for ${it} (Optional):", 
 							required: false, 
 							options: rtnList
-						}				
-					}
-				else
-					{
-					location.modes.each()
-			    		{
-						input "mode${it}",
-							"text",
-							title: "Execute this routine in SmartThings for ${it} (Optional):", 
-							required: false, 
-							multiple: false
 						}				
 					}
 				}	
@@ -276,7 +264,7 @@ def initialize() {
 	initializeAppEndpoint()
 	subscribeToPushEvents()
 	scheduleDeviceRefresh()
-	if(eventPushEnabled)
+	if(modePushEnabled && atomicState?.stRoutines>null)
 		subscribe (location, "mode", handleModeChange)
 
 }
@@ -559,33 +547,63 @@ def handleDeviceEvent(evt) {
 	}
 }
 
+
 def handleModeChange(evt)
 	{
 	logDebug "handleModeChange entered Name: ${evt.name} Value:${evt.value} Source:${evt?.source} Device:${evt?.device} Event: ${evt}"
-	def	theModeName='mode'+evt.value
-	def passing=""
-	def b64v
-	def b64d
 	if ("mode${evt.value}")
 		{
-		passing=settings."mode${evt.value}"
+		def passing=settings."mode${evt.value}"		//get ST routine name based upon the mode
 		if (passing > "")
 			{
-			b64v=URLEncoder.encode(passing, "UTF-8");				//url encode due to spaces and punctuation
-			b64d=URLEncoder.encode(evt.value, "UTF-8");				//url encode due to spaces and punctuation	
-			logDebug "Mode setting: ${theModeName} pushing routine ${passing} to Smartthings as ${b64v} ${b64d}"
-/*				name & deviceName is evt.name, should always be "mode"
-				value is the user routine to execute, url encoded
-				deviceDNI is original HE mode, url encoded
-*/			def data = [name:evt.name, value:b64v, deviceName: evt.name, deviceDni: b64d]
-			pushEvent(data)
+			passing_encode=URLEncoder.encode(passing, "UTF-8")
+			def uri = smartThingsUri
+			def path = "${smartThingsRelativePath}/executeroutine/${passing_encode}"
+			def params = [
+				uri: "${uri}",
+				path: "${path}"
+				]
+			def msg = "Pushing Routine ${passing} from mode ${evt.value})"
+			try 
+				{
+				httpGet(params) 
+					{ resp ->
+					logDebug "${msg} Response: ${resp?.status}"
+					}
+				} 
+			catch (e) 
+				{
+				log.error "handleModeChange ${msg} Error: $e"
+				}
 			}
-		else
-			logDebug "Mode setting for ${theModeName} not sent, it is null"
-		}
-	else
-		log.error "Other Hub Event Pusher: mode setting not found for ${evt.value}, adjust mode data, then save app settings"
+		}	
 	}	
+
+def getSmartThingsRoutines() 
+	{
+	def uri = smartThingsUri
+	def path = "${smartThingsRelativePath}/getroutines"
+	
+	def params = [
+		uri: "${uri}",
+		path: "${path}"
+		]
+	log.debug "${params}"	
+	try 
+		{
+		httpGet(params)
+			{ resp ->
+				if (resp?.status == 200)
+					return resp.data
+				else
+					return false
+			}
+		}	
+	catch (e) 
+		{
+		log.error "getSmartThingsRoutines Failed Error: $e"
+		}
+	}
 
 def pushEvent(data) {
 	// logDebug "pushEvent(${data})"
@@ -603,22 +621,16 @@ def pushEvent(data) {
 		try {
 			httpGet(params) { resp ->
 				logDebug "${msg} Response: ${resp?.status}"
-				if (data.name=='routines')
-					{
-					if (resp?.status == 200)
-						return resp.data
-					else
-						return false
-					}	
 				}
 		} catch (e) {
 			log.error "${msg} Error: $e"
 		}
 	}	
-	else {
+	else 
+		{
 		log.warn "${smartThingsUrl} is not a valid SmartThings Url."
+		}
 	}
-}
 
 
 private getSmartThingsUri() {
