@@ -8,6 +8,10 @@
  *
  *  Changelog:
  *	
+ *    2.2.3 (12/28/2018) Arn Burkhoff
+ *			- Added: create paths for routine get and mode push
+ *			- remove: routines page in v2.2.1  		
+ *		
  *    2.2.2 (12/28/2018) Arn Burkhoff
  *			- Added: Dynamic push to Hubitat of Routine Names 
  *
@@ -44,7 +48,7 @@
  */
 def version()
 	{
-	return "2.2.2";
+	return "2.2.3";
 	}
 
 definition(
@@ -64,7 +68,6 @@ definition(
 	page(name:"notificationsPage")
 	page(name:"otherSettingsPage")
 	page(name: "displaySmartThingsUrlPage", nextPage: "mainPage")
-	page(name: "displaySmartThingsRoutinesPage", nextPage: "mainPage")
 	page(name: "refreshSmartThingsUrlPage")	
 	page(name: "refreshSmartThingsUrlConfirmPage")		
 }
@@ -114,7 +117,6 @@ def mainPage() {
 					href "displaySmartThingsUrlPage", title: "Display SmartThings Dashboard Url", description: "Displays the url in the Live Logging section of the IDE."
 				}
 				href "refreshSmartThingsUrlConfirmPage", title: "Refresh SmartThings Dashboard Url", description: "Disables the existing url and generates a new one."
- 				href "displaySmartThingsRoutinesPage", title: "When routine name are not auto fetched in Pusher module, tap to display your SmartThings Routine Names in Live Logging of the IDE", description: "Copy with brackets, then Paste into Pusher Module's ST Routines field."
 			}			
 			
 				
@@ -433,17 +435,6 @@ private displaySmartThingsUrlPage() {
 		section() {
 			paragraph "The SmartThings Dashboard Url has been displayed in Live Logging"
 			displaySmartThingsUrl()
-		}
-	}
-}
-
-private displaySmartThingsRoutinesPage() {
-	dynamicPage(name: "displaySmartThingsRoutinesPage", title: "") {
-		section() {
-			paragraph "The SmartThings Routine Names shown below have been displayed in Live Logging"
-			paragraph "Copy brackets and routines names into Pusher module, Routines input field"  	
-			paragraph "${location.helloHome?.getPhrases()*.label}"
-			log.info "SmartThings Routines: ${location.helloHome?.getPhrases()*.label}"	
 		}
 	}
 }
@@ -1490,6 +1481,8 @@ mappings {
 	path("/event/:name/:value/:deviceId") {action: [GET: "api_event"]}
 	path("/refresh-devices") {action: [POST: "api_refreshDevices"]}
 	path("/update-other-hub-url") {action: [POST: "api_updateOtherHubUrl"]}
+	path("/getroutines") {action: [GET: "api_getRoutines"]}
+	path("/executeroutine/:routine") {action: [GET: "api_executeRoutine"]}
 	path("/dashboard") {action: [GET: "api_dashboard"]}
 	path("/dashboard/:capability") {action: [GET: "api_dashboard"]}	
 	path("/dashboard/:capability/:cmd") {action: [GET: "api_dashboard"]}
@@ -1497,31 +1490,21 @@ mappings {
 }
 
 private api_event() {
-	log.debug "Device ${params?.deviceId} ${params?.name} is ${params?.value}"
-	// logDebug "Device ${params?.deviceId} ${params?.name} is ${params?.value}"
-	if (params?.name=='mode')
-		{
-		def STroutine=URLDecoder.decode(params.value, "UTF-8");				//url decode
-		def HEmode=URLDecoder.decode(params.deviceId, "UTF-8");				//url decode
-		log.debug "HE Mode ${HEmode} executing Routine ${STroutine}"
-		location.helloHome?.execute(STroutine)
-		return []
-		}
-	else
-	if (params?.name=='routines')
-		{
-		return location.helloHome?.getPhrases()*.label
-//	    def resp = []
-//	    location.helloHome?.getPhrases()*.label.each {
-//			resp << [name: it.displayName, value: it.currentValue("switch")]
-//    		}
-	    return resp
-	    }
-	else
-		{
-		childEvent("${params?.deviceId}", "${params?.name}", params.value)
-		return []
-		}
+	logDebug "Device ${params?.deviceId} ${params?.name} is ${params?.value}"
+	childEvent("${params?.deviceId}", "${params?.name}", params.value)
+	return []
+}
+
+private api_getRoutines() {
+	logDebug "api_getRoutines entered"
+	return location.helloHome?.getPhrases()*.label
+}
+
+private api_executeRoutine() {
+	def STroutine=URLDecoder.decode(params.routine, "UTF-8");				//url decode
+	logDebug "api_executeRoutine entered for routine ${STroutine}"
+	location.helloHome?.execute(STroutine)
+	return []
 }
 
 private api_dashboardUrl(capName=null) {	
