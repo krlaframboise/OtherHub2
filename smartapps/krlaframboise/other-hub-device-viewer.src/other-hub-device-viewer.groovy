@@ -1,5 +1,5 @@
 /**
- *  SmartThings: Other Hub Device Viewer v2.1.1
+ *  SmartThings: Other Hub Device Viewer v2.2
  *
  *  Author: 
  *    Kevin LaFramboise (krlaframboise)
@@ -7,6 +7,10 @@
  *	Donations: https://www.paypal.me/krlaframboise
  *
  *  Changelog:
+ *
+ *    2.2 (04/08/2020)
+ *			- Fixed logging bug.
+ *			- Fixed humidity reporting
  *
  *    2.1.1 (10/26/2018)
  *			- Fix for button device creation.
@@ -2078,7 +2082,7 @@ private convertTimeToLocalDate(utcTime) {
 			}
 		}
 		catch (e) {
-			logWarn "Unable to get formatted local time for ${utcTime}: ${e.message}"
+			log.warn "Unable to get formatted local time for ${utcTime}: ${e.message}"
 		}
 	}
 	return localDate
@@ -2144,7 +2148,8 @@ private getDeviceRefreshCapabilities() {
 		[
 			name: "Relative Humidity Measurement",
 			pluralName: "Relative Humidity Sensors",
-			prefType: "relativeHumidityMeasurement"
+			prefType: "relativeHumidityMeasurement",
+			attributeName: "humidity"
 		],
 		[
 			name: "Smoke Detector",
